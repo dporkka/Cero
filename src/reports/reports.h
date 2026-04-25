@@ -23,7 +23,7 @@ typedef struct {
 
 /* Report row structure (example - customize based on actual data) */
 typedef struct {
-    char date[32];
+    char date[48];
     int user_count;
     int session_count;
     int account_count;

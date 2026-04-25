@@ -28,26 +28,9 @@
     </tr>
 </table>
 
-{{#if_grace_period}}
-<div class="alert alert-error">
-    Your subscription is in a grace period. Please contact billing to renew.
-</div>
-{{/if_grace_period}}
+{{grace_period_html}}
 
-{{#if_free_plan}}
-<div class="alert alert-info">
-    <p><strong>Upgrade to Pro for advanced features:</strong></p>
-    <ul style="margin-left: 2rem; margin-top: 0.5rem;">
-        <li>Extended date range for reports (unlimited vs 7 days)</li>
-        <li>CSV export</li>
-        <li>Report grouping (by day, week, month)</li>
-        <li>Priority support</li>
-    </ul>
-    <p style="margin-top: 1rem;">
-        <a href="/billing" class="button">View Upgrade Options</a>
-    </p>
-</div>
-{{/if_free_plan}}
+{{upgrade_html}}
 
 <h3>Quick Links</h3>
 <ul style="list-style: none; margin-top: 1rem;">

@@ -10,41 +10,152 @@
 #include "../utils/log.h"
 #include "../utils/string_utils.h"
 #include "../templates/template.h"
+#include <crypt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <crypt.h>
 #include <time.h>
 
-/* Hash password using crypt (SHA-512) */
+#define BCRYPT_COST 12
+#define BCRYPT_SALT_LENGTH 22
+
+typedef struct {
+    char *values[16];
+    int count;
+} owned_strings_t;
+
+static const char *auth_track_string(owned_strings_t *owned, char *value) {
+    if (!value) {
+        return "";
+    }
+
+    if (owned->count < (int)(sizeof(owned->values) / sizeof(owned->values[0]))) {
+        owned->values[owned->count++] = value;
+        return value;
+    }
+
+    free(value);
+    return "";
+}
+
+static const char *auth_track_escape(owned_strings_t *owned, const char *value) {
+    return auth_track_string(owned, html_escape(value ? value : ""));
+}
+
+static void auth_free_owned(owned_strings_t *owned) {
+    for (int i = 0; i < owned->count; i++) {
+        free(owned->values[i]);
+    }
+}
+
+static int auth_generate_bcrypt_salt(char *salt, size_t salt_size) {
+    static const char bcrypt_alphabet[] =
+        "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    unsigned char random_bytes[BCRYPT_SALT_LENGTH];
+    char encoded[BCRYPT_SALT_LENGTH + 1];
+    FILE *urandom;
+
+    if (salt_size < 8 + BCRYPT_SALT_LENGTH + 1) {
+        return -1;
+    }
+
+    urandom = fopen("/dev/urandom", "rb");
+    if (!urandom) {
+        return -1;
+    }
+
+    if (fread(random_bytes, 1, sizeof(random_bytes), urandom) != sizeof(random_bytes)) {
+        fclose(urandom);
+        return -1;
+    }
+    fclose(urandom);
+
+    for (size_t i = 0; i < sizeof(random_bytes); i++) {
+        encoded[i] = bcrypt_alphabet[random_bytes[i] & 0x3F];
+    }
+    encoded[BCRYPT_SALT_LENGTH] = '\0';
+
+    snprintf(salt, salt_size, "$2b$%02d$%s", BCRYPT_COST, encoded);
+    return 0;
+}
+
+static void auth_set_html_response(http_response_t *resp,
+                                   int status_code,
+                                   const char *html) {
+    response_set_status(resp, status_code);
+    response_set_content_type(resp, "text/html; charset=utf-8");
+    response_set_body(resp, html);
+}
+
+static char *auth_render_login_page(http_request_t *req, const char *error_message) {
+    template_ctx_t *ctx = template_ctx_new();
+    owned_strings_t owned = {{0}, 0};
+    char *page;
+    char error_html[1024];
+
+    if (!ctx) {
+        return NULL;
+    }
+
+    if (error_message && error_message[0] != '\0') {
+        const char *escaped_error = auth_track_escape(&owned, error_message);
+        snprintf(error_html, sizeof(error_html),
+                 "<div class=\"alert alert-error\">%s</div>", escaped_error);
+    } else {
+        error_html[0] = '\0';
+    }
+
+    template_set(ctx, "error_html", error_html);
+    template_set(ctx, "csrf_token", "");
+
+    page = template_render_page("Login", "login.html", ctx,
+                                req ? req->is_authenticated : 0,
+                                req ? req->user_email : "",
+                                req && strcmp(req->user_role, "admin") == 0);
+
+    auth_free_owned(&owned);
+    template_ctx_free(ctx);
+    return page;
+}
+
+/* Hash password using bcrypt-compatible libcrypt support */
 int auth_hash_password(const char *password, char *hash, size_t hash_size) {
-    /* Generate salt for SHA-512 ($6$ prefix) */
-    char *random_hex = generate_random_hex(16);
-    if (!random_hex) {
-        LOG_ERROR("auth", "Failed to generate salt");
-        return -1;
-    }
-
     char salt[64];
-    snprintf(salt, sizeof(salt), "$6$%s", random_hex);
-    free(random_hex);
+    char *hashed;
 
-    /* Hash password */
-    char *hashed = crypt(password, salt);
-    if (!hashed) {
-        LOG_ERROR("auth", "Failed to hash password");
+    if (!password || !hash || hash_size == 0) {
         return -1;
     }
 
-    /* Copy result */
+    if (auth_generate_bcrypt_salt(salt, sizeof(salt)) != 0) {
+        LOG_ERROR("auth", "Failed to generate bcrypt salt");
+        return -1;
+    }
+
+    hashed = crypt(password, salt);
+    if (!hashed || hashed[0] == '\0') {
+        LOG_ERROR("auth", "Failed to hash password with bcrypt salt");
+        return -1;
+    }
+
+    if (strncmp(hashed, "$2", 2) != 0) {
+        LOG_ERROR("auth", "System crypt did not return a bcrypt hash");
+        return -1;
+    }
+
     safe_strncpy(hash, hashed, hash_size);
     return 0;
 }
 
 /* Verify password against hash */
 int auth_verify_password(const char *password, const char *hash) {
-    char *result = crypt(password, hash);
+    char *result;
+
+    if (!password || !hash) {
+        return 0;
+    }
+
+    result = crypt(password, hash);
     if (!result) {
         LOG_ERROR("auth", "Failed to verify password");
         return 0;
@@ -57,6 +168,9 @@ int auth_verify_password(const char *password, const char *hash) {
 int auth_authenticate_user(const char *email, const char *password) {
     sqlite3_stmt *stmt;
     const char *sql = "SELECT id, password_hash, is_active FROM users WHERE email = ?";
+    int user_id;
+    char password_hash[256];
+    int is_active;
 
     if (db_prepare(sql, &stmt) != 0) {
         LOG_ERROR("auth", "Failed to prepare authentication query");
@@ -65,225 +179,187 @@ int auth_authenticate_user(const char *email, const char *password) {
 
     db_bind_text(stmt, 1, email);
 
-    int result = sqlite3_step(stmt);
-    if (result != SQLITE_ROW) {
-        LOG_INFO("auth", "User not found: %s", email);
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
         db_finalize(stmt);
+        LOG_INFO("auth", "User not found: %s", email ? email : "(null)");
         return -1;
     }
 
-    int user_id = db_column_int(stmt, 0);
-    const char *password_hash = db_column_text(stmt, 1);
-    int is_active = db_column_int(stmt, 2);
-
-    /* Check if user is active */
-    if (!is_active) {
-        LOG_WARN("auth", "Inactive user attempted login: %s", email);
-        db_finalize(stmt);
-        return -1;
-    }
-
-    /* Verify password */
-    int password_valid = auth_verify_password(password, password_hash);
+    user_id = db_column_int(stmt, 0);
+    safe_strncpy(password_hash, db_column_text(stmt, 1), sizeof(password_hash));
+    is_active = db_column_int(stmt, 2);
     db_finalize(stmt);
 
-    if (!password_valid) {
+    if (!is_active) {
+        LOG_WARN("auth", "Inactive user attempted login: %s", email);
+        return -1;
+    }
+
+    if (!auth_verify_password(password, password_hash)) {
         LOG_WARN("auth", "Invalid password for user: %s", email);
         return -1;
     }
 
-    LOG_INFO("auth", "User authenticated successfully: %s (ID: %d)", email, user_id);
     return user_id;
 }
 
 /* Create user account */
 int auth_create_user(int account_id, const char *email, const char *password, const char *role) {
     char password_hash[256];
+    sqlite3_stmt *stmt;
+    const char *sql = "INSERT INTO users "
+                      "(account_id, email, password_hash, role, is_active, created_at) "
+                      "VALUES (?, ?, ?, ?, 1, ?)";
+    time_t now = time(NULL);
 
-    /* Hash password */
     if (auth_hash_password(password, password_hash, sizeof(password_hash)) != 0) {
-        LOG_ERROR("auth", "Failed to hash password for new user");
         return -1;
     }
-
-    /* Insert user */
-    sqlite3_stmt *stmt;
-    const char *sql = "INSERT INTO users (account_id, email, password_hash, role, is_active, created_at) "
-                      "VALUES (?, ?, ?, ?, 1, ?)";
 
     if (db_prepare(sql, &stmt) != 0) {
         LOG_ERROR("auth", "Failed to prepare user creation query");
         return -1;
     }
 
-    time_t now = time(NULL);
     db_bind_int(stmt, 1, account_id);
     db_bind_text(stmt, 2, email);
     db_bind_text(stmt, 3, password_hash);
-    db_bind_text(stmt, 4, role);
+    db_bind_text(stmt, 4, role ? role : "user");
     db_bind_int64(stmt, 5, now);
 
-    int result = sqlite3_step(stmt);
-    db_finalize(stmt);
-
-    if (result != SQLITE_DONE) {
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
         LOG_ERROR("auth", "Failed to create user: %s", db_error_message());
+        db_finalize(stmt);
         return -1;
     }
 
-    int user_id = (int)db_last_insert_rowid();
-    LOG_INFO("auth", "Created user: %s (ID: %d)", email, user_id);
-
-    return user_id;
+    db_finalize(stmt);
+    return (int)db_last_insert_rowid();
 }
 
 /* Update user last login timestamp */
 int auth_update_last_login(int user_id) {
     sqlite3_stmt *stmt;
     const char *sql = "UPDATE users SET last_login_at = ? WHERE id = ?";
+    time_t now = time(NULL);
 
     if (db_prepare(sql, &stmt) != 0) {
         LOG_ERROR("auth", "Failed to prepare login update query");
         return -1;
     }
 
-    time_t now = time(NULL);
     db_bind_int64(stmt, 1, now);
     db_bind_int(stmt, 2, user_id);
 
-    int result = sqlite3_step(stmt);
-    db_finalize(stmt);
-
-    if (result != SQLITE_DONE) {
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
         LOG_ERROR("auth", "Failed to update last login");
+        db_finalize(stmt);
         return -1;
     }
 
+    db_finalize(stmt);
     return 0;
 }
 
 /* Route handler: Login page */
 http_response_t *handle_login_page(http_request_t *req) {
     http_response_t *resp = response_new();
-    response_set_content_type(resp, "text/html");
+    char *html;
 
-    /* If already authenticated, redirect to dashboard */
+    if (!resp) {
+        return NULL;
+    }
+
     if (req->is_authenticated) {
         response_redirect(resp, "/dashboard", 0);
         return resp;
     }
 
-    /* Render login form */
-    template_ctx_t *ctx = template_ctx_new();
-    template_set(ctx, "title", "Login");
-
-    char *html = template_render_file("login.html", ctx);
+    html = auth_render_login_page(req, NULL);
     if (!html) {
-        /* Fallback to simple HTML */
-        response_set_body(resp,
-            "<html><head><title>Login</title></head><body>"
-            "<h1>Login</h1>"
-            "<form method=\"POST\" action=\"/login\">"
-            "<p><label>Email: <input type=\"email\" name=\"email\" required></label></p>"
-            "<p><label>Password: <input type=\"password\" name=\"password\" required></label></p>"
-            "<p><button type=\"submit\">Login</button></p>"
-            "</form>"
-            "</body></html>");
-    } else {
-        response_set_body(resp, html);
-        free(html);
+        auth_set_html_response(resp, HTTP_500_INTERNAL_SERVER_ERROR,
+                               "<h1>Error</h1><p>Failed to render login page</p>");
+        return resp;
     }
 
-    template_ctx_free(ctx);
+    auth_set_html_response(resp, HTTP_200_OK, html);
+    free(html);
     return resp;
 }
 
 /* Route handler: Login form submission */
 http_response_t *handle_login_submit(http_request_t *req) {
     http_response_t *resp = response_new();
-
-    /* Get POST parameters */
     char *email = request_get_post_param(req, "email");
     char *password = request_get_post_param(req, "password");
+    int user_id;
+
+    if (!resp) {
+        free(email);
+        free(password);
+        return NULL;
+    }
 
     if (!email || !password) {
-        LOG_WARN("auth", "Missing email or password in login request");
-        response_set_status(resp, 400);
-        response_set_content_type(resp, "text/html");
-        response_set_body(resp, "<h1>Bad Request</h1><p><a href=\"/login\">Try again</a></p>");
+        char *html = auth_render_login_page(req, "Email and password are required.");
+        auth_set_html_response(resp, HTTP_400_BAD_REQUEST,
+                               html ? html : "<h1>Bad Request</h1>");
+        free(html);
         free(email);
         free(password);
         return resp;
     }
 
-    /* Authenticate user */
-    int user_id = auth_authenticate_user(email, password);
-    free(password); /* Clear password from memory */
+    user_id = auth_authenticate_user(email, password);
+    memset(password, 0, strlen(password));
+    free(password);
 
     if (user_id < 0) {
-        LOG_INFO("auth", "Failed login attempt for: %s", email);
-        response_set_content_type(resp, "text/html");
-        response_set_body(resp,
-            "<html><head><title>Login Failed</title></head><body>"
-            "<h1>Login Failed</h1>"
-            "<p>Invalid email or password.</p>"
-            "<p><a href=\"/login\">Try again</a></p>"
-            "</body></html>");
+        char *html = auth_render_login_page(req, "Invalid email or password.");
+        auth_set_html_response(resp, HTTP_401_UNAUTHORIZED,
+                               html ? html : "<h1>Unauthorized</h1>");
+        free(html);
         free(email);
         return resp;
     }
 
-    /* Update last login */
     auth_update_last_login(user_id);
 
-    /* Create session */
-    char session_token[65];
-    int session_result = session_create(user_id, req->client_ip,
-                                       request_get_header(req, "User-Agent"),
-                                       session_token, sizeof(session_token));
+    {
+        char session_token[65];
+        if (session_create(user_id, req->client_ip,
+                           request_get_header(req, "User-Agent"),
+                           session_token, sizeof(session_token)) != 0) {
+            free(email);
+            auth_set_html_response(resp, HTTP_500_INTERNAL_SERVER_ERROR,
+                                   "<h1>Error</h1><p>Failed to create session.</p>");
+            return resp;
+        }
 
-    free(email);
-
-    if (session_result != 0) {
-        LOG_ERROR("auth", "Failed to create session for user %d", user_id);
-        response_set_status(resp, 500);
-        response_set_content_type(resp, "text/html");
-        response_set_body(resp, "<h1>Error</h1><p>Failed to create session</p>");
-        return resp;
+        response_set_cookie(resp, "session_token", session_token,
+                            86400 * 30, 1, 0, "Strict");
     }
 
-    /* Set session cookie */
-    response_set_cookie(resp, "session_token", session_token,
-                       86400 * 7, /* 7 days */
-                       1, /* HttpOnly */
-                       0, /* Not Secure (use 1 in production with HTTPS) */
-                       "Strict");
-
-    /* Redirect to dashboard */
+    free(email);
     response_redirect(resp, "/dashboard", 0);
-
-    LOG_INFO("auth", "User %d logged in successfully", user_id);
     return resp;
 }
 
 /* Route handler: Logout */
 http_response_t *handle_logout(http_request_t *req) {
     http_response_t *resp = response_new();
+    const char *token;
 
-    /* Get session token from cookie */
-    const char *token = request_get_cookie(req, "session_token");
-
-    if (token) {
-        /* Delete session from database */
-        session_delete(token);
-        LOG_INFO("auth", "User logged out");
+    if (!resp) {
+        return NULL;
     }
 
-    /* Delete session cookie */
+    token = request_get_cookie(req, "session_token");
+    if (token) {
+        session_delete(token);
+    }
+
     response_delete_cookie(resp, "session_token");
-
-    /* Redirect to home */
     response_redirect(resp, "/", 0);
-
     return resp;
 }

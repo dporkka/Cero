@@ -81,10 +81,10 @@ int entitlement_get_max_report_days(int account_id) {
             return 7; /* 1 week */
 
         case PLAN_PRO:
-            return 90; /* 3 months */
+            return 0; /* Unlimited */
 
         case PLAN_ENTERPRISE:
-            return 365; /* 1 year */
+            return 0; /* Unlimited */
 
         default:
             return 7;

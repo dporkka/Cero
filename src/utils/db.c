@@ -42,6 +42,13 @@ static int execute_sql_file(const char *filename) {
     free(sql);
 
     if (rc != SQLITE_OK) {
+        if (err_msg != NULL &&
+            (strstr(err_msg, "already exists") != NULL ||
+             strstr(err_msg, "UNIQUE constraint failed: schema_version.version") != NULL)) {
+            LOG_DEBUG("db", "Schema already applied: %s", err_msg);
+            sqlite3_free(err_msg);
+            return 0;
+        }
         LOG_ERROR("db", "Failed to execute schema: %s", err_msg);
         sqlite3_free(err_msg);
         return -1;

@@ -88,6 +88,9 @@ make check-deps
 # Build
 make
 
+# Run smoke coverage
+make test
+
 # Initialize database
 make init-db
 ```
@@ -317,42 +320,43 @@ This system succeeds if:
 - Architecture design and documentation
 - SQLite schema with append-only audit tables
 - Folder structure and organization
-- Core HTTP server skeleton
+- Core HTTP server, request parsing, response building, and router dispatch
 - Configuration and secrets management
 - Logging system
-- HTML templates (login, dashboard, billing, reports, admin)
+- String, time, template, and rate-limiting utilities
+- Authentication with bcrypt-compatible password hashing
+- Server-side session management
+- Subscription, entitlement, and admin billing flows
+- Reports generation and CSV export
+- HTML templates wired into the application
 - Makefile build system
+- End-to-end smoke test coverage (`make test`)
 - Operational playbook
 - Long-term maintenance guide
 
-### 🚧 To Be Implemented
+### 📦 Current Application State
 
-The following components have headers defined and architecture documented, but need full implementation:
+The application now boots as a single binary with the documented core flows implemented:
 
-- HTTP request/response parsing
-- Router and handler dispatch
-- Authentication (bcrypt integration)
-- Session management
-- Subscription and entitlement logic
-- Admin billing operations
-- Reports generation and CSV export
-- Rate limiting implementation
-- Template rendering engine
-- String and time utilities
+- Login/logout with bcrypt-compatible password verification
+- SQLite-backed sessions with secure cookies
+- Template-rendered dashboard, billing, reports, and admin billing pages
+- Subscription and entitlement checks that gate reporting and CSV export
+- Admin payment confirmation that updates subscriptions and appends billing events
+- SQLite-backed token-bucket rate limiting for both IPs and authenticated users
+- Repeatable smoke coverage for login, routing, billing, reporting, CSV export, logout, and rate limiting
 
-See [IMPLEMENTATION.md](IMPLEMENTATION.md) for detailed implementation guide.
+See [IMPLEMENTATION.md](IMPLEMENTATION.md) for the updated implementation status.
 
-## Building the Remaining Components
+## Verification
 
-The project is ~40% implemented with complete architecture, schema, and skeleton code. To complete:
+Use the built-in smoke test to verify the current application state:
 
-1. Implement the components listed above following the header files
-2. Use the architecture and schema as your guide
-3. Follow the implementation patterns in existing code (log.c, config.c, db.c, server.c)
-4. Test each component thoroughly
-5. Keep it simple and boring
+```bash
+make test
+```
 
-**Estimated effort**: 40-80 hours for an experienced C developer.
+The smoke flow builds the binary, initializes a temporary database, logs in as an admin user, exercises billing and reports, verifies CSV entitlement changes, and confirms rate limiting behavior.
 
 ## Why This Approach?
 
@@ -442,9 +446,9 @@ SQLite handles ~100K requests/second on modest hardware. If you need more, you'v
 Vertical scaling (bigger server) gets you very far. If you need horizontal scaling, this isn't the right architecture.
 
 ### "Is this production-ready?"
-The architecture is production-ready. The implementation is ~40% complete. Complete the remaining components following the implementation guide.
+The architecture is production-ready and the documented core application flows are now implemented. Before production deployment, populate real secrets, seed real users, and run the smoke test in your deployment environment.
 
-**Next Steps**: See [IMPLEMENTATION.md](IMPLEMENTATION.md) to complete the remaining components.
+**Next Steps**: See [IMPLEMENTATION.md](IMPLEMENTATION.md) for the current implementation summary and verification checklist.
 
 ---
 
@@ -467,4 +471,3 @@ And that's the point.
 ## Donate 
 
 To support the developer, you can <a href="https://buy.stripe.com/14AaEWfRXcm5aPrfSag360b">make a donation here<a>.
-

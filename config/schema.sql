@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
     description TEXT NOT NULL
 );
 
-INSERT INTO schema_version (version, applied_at, description)
+INSERT OR IGNORE INTO schema_version (version, applied_at, description)
 VALUES (1, strftime('%s', 'now'), 'Initial schema');
 
 -- ============================================================================
@@ -58,10 +58,12 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL UNIQUE,      -- Email is unique across system
     password_hash TEXT NOT NULL,     -- bcrypt hash
     role TEXT NOT NULL DEFAULT 'user',  -- user, admin
+    is_active INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,     -- UTC epoch
     last_login_at INTEGER,           -- UTC epoch, NULL if never logged in
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
-    CONSTRAINT valid_role CHECK (role IN ('user', 'admin'))
+    CONSTRAINT valid_role CHECK (role IN ('user', 'admin')),
+    CONSTRAINT valid_is_active CHECK (is_active IN (0, 1))
 );
 
 CREATE UNIQUE INDEX idx_users_email ON users(email);

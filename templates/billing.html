@@ -18,54 +18,10 @@
         <th>Valid Until</th>
         <td>{{subscription_valid_until}}</td>
     </tr>
-    {{#if_grace_period}}
-    <tr>
-        <th>Grace Period Until</th>
-        <td>{{subscription_grace_until}}</td>
-    </tr>
-    {{/if_grace_period}}
+    {{subscription_grace_row}}
 </table>
 
-{{#if_free_plan}}
-<div style="margin-top: 2rem; padding: 2rem; background: #f8f9fa; border-radius: 4px;">
-    <h3>Upgrade to Pro</h3>
-    <p><strong>$49/month or $490/year</strong></p>
-    <p>Includes:</p>
-    <ul style="margin-left: 2rem; margin-top: 0.5rem;">
-        <li>Unlimited report date ranges</li>
-        <li>CSV export functionality</li>
-        <li>Report grouping (daily, weekly, monthly)</li>
-        <li>Priority support</li>
-    </ul>
-
-    <h4 style="margin-top: 1.5rem;">How to Upgrade</h4>
-    <p>This system uses manual billing for maximum reliability.</p>
-    <ol style="margin-left: 2rem; margin-top: 0.5rem;">
-        <li>Choose your payment method below</li>
-        <li>Complete payment</li>
-        <li>Email receipt to: billing@example.com</li>
-        <li>Admin will activate your subscription within 24 hours</li>
-    </ol>
-
-    <h4 style="margin-top: 1.5rem;">Payment Options</h4>
-    <ul style="margin-left: 2rem; margin-top: 0.5rem;">
-        <li><strong>Bank Transfer:</strong> Account: 12345678, Routing: 987654321</li>
-        <li><strong>Check:</strong> Mail to: 123 Main St, City, State 12345</li>
-        <li><strong>Payment Link:</strong> <a href="https://pay.example.com/invoice/{{account_id}}">Click here to pay online</a></li>
-    </ul>
-
-    <p style="margin-top: 1rem; color: #7f8c8d;">
-        <em>Note: Payment links are provided for convenience but are not required.
-        The system operates independently of payment providers.</em>
-    </p>
-</div>
-{{/if_free_plan}}
-
-{{#if_pro_plan}}
-<div class="alert alert-success">
-    Thank you for your Pro subscription!
-</div>
-{{/if_pro_plan}}
+{{plan_specific_html}}
 
 <h3 style="margin-top: 2rem;">Billing History</h3>
 <table>
@@ -79,22 +35,7 @@
         </tr>
     </thead>
     <tbody>
-        {{#each_billing_event}}
-        <tr>
-            <td>{{event_date}}</td>
-            <td>{{event_type}}</td>
-            <td>{{plan}}</td>
-            <td>{{amount}}</td>
-            <td>{{reference}}</td>
-        </tr>
-        {{/each_billing_event}}
-        {{#if_no_events}}
-        <tr>
-            <td colspan="5" style="text-align: center; color: #7f8c8d;">
-                No billing events yet
-            </td>
-        </tr>
-        {{/if_no_events}}
+        {{billing_events_rows}}
     </tbody>
 </table>
 

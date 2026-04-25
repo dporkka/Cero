@@ -5,10 +5,50 @@
 
 #include "template.h"
 #include "../utils/log.h"
+#include "../utils/string_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+
+static char *template_strdup(const char *value) {
+    const char *safe_value = value ? value : "";
+    size_t length = strlen(safe_value) + 1;
+    char *copy = malloc(length);
+    if (!copy) {
+        return NULL;
+    }
+
+    memcpy(copy, safe_value, length);
+    return copy;
+}
+
+static char *template_build_navigation(int is_authenticated,
+                                       const char *user_email,
+                                       int is_admin) {
+    char *escaped_email = html_escape(user_email ? user_email : "");
+    if (!escaped_email) {
+        escaped_email = template_strdup("");
+    }
+
+    char buffer[2048];
+    if (is_authenticated) {
+        snprintf(buffer, sizeof(buffer),
+                 "<li><a href=\"/dashboard\">Dashboard</a></li>"
+                 "<li><a href=\"/reports\">Reports</a></li>"
+                 "<li><a href=\"/billing\">Billing</a></li>"
+                 "%s"
+                 "<li><a href=\"/logout\">Logout (%s)</a></li>",
+                 is_admin ? "<li><a href=\"/admin/billing\">Admin</a></li>" : "",
+                 escaped_email ? escaped_email : "");
+    } else {
+        snprintf(buffer, sizeof(buffer),
+                 "<li><a href=\"/login\">Login</a></li>");
+    }
+
+    free(escaped_email);
+    return template_strdup(buffer);
+}
 
 /* Create new template context */
 template_ctx_t *template_ctx_new(void) {
@@ -204,6 +244,51 @@ char *template_render_file(const char *template_name, template_ctx_t *ctx) {
     free(content);
 
     return result;
+}
+
+char *template_render_layout(const char *page_title, const char *content_html,
+                            int is_authenticated, const char *user_email,
+                            int is_admin) {
+    template_ctx_t *layout_ctx = template_ctx_new();
+    char *navigation_links;
+    char *rendered;
+
+    if (!layout_ctx) {
+        return NULL;
+    }
+
+    navigation_links = template_build_navigation(is_authenticated, user_email, is_admin);
+    if (!navigation_links) {
+        template_ctx_free(layout_ctx);
+        return NULL;
+    }
+
+    template_set(layout_ctx, "page_title", page_title ? page_title : "");
+    template_set(layout_ctx, "content", content_html ? content_html : "");
+    template_set(layout_ctx, "navigation_links", navigation_links);
+
+    rendered = template_render_file("layout.html", layout_ctx);
+
+    free(navigation_links);
+    template_ctx_free(layout_ctx);
+    return rendered;
+}
+
+char *template_render_page(const char *page_title, const char *template_name,
+                          template_ctx_t *ctx, int is_authenticated,
+                          const char *user_email, int is_admin) {
+    char *content;
+    char *page;
+
+    content = template_render_file(template_name, ctx);
+    if (!content) {
+        return NULL;
+    }
+
+    page = template_render_layout(page_title, content, is_authenticated,
+                                  user_email, is_admin);
+    free(content);
+    return page;
 }
 
 /* Free template context */

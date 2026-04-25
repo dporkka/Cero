@@ -1,14 +1,8 @@
 <h2>Advanced Reports</h2>
 
-{{#if_free_plan}}
-<div class="alert alert-info">
-    You are on the Free plan. Reports are limited to 7-day date ranges with no CSV export.
-    <a href="/billing" style="color: white; text-decoration: underline;">Upgrade to Pro</a>
-    for unlimited date ranges, grouping, and CSV export.
-</div>
-{{/if_free_plan}}
+{{plan_notice_html}}
 
-<form method="GET" action="/reports/generate">
+<form method="POST" action="/reports/generate">
     <div class="form-group">
         <label for="start_date">Start Date</label>
         <input type="date" id="start_date" name="start_date" value="{{start_date}}" required>
@@ -19,69 +13,15 @@
         <input type="date" id="end_date" name="end_date" value="{{end_date}}" required>
     </div>
 
-    {{#if_pro_plan}}
-    <div class="form-group">
-        <label for="grouping">Group By</label>
-        <select id="grouping" name="grouping">
-            <option value="none">No Grouping</option>
-            <option value="day">Daily</option>
-            <option value="week">Weekly</option>
-            <option value="month">Monthly</option>
-        </select>
-    </div>
-    {{/if_pro_plan}}
+    {{grouping_controls_html}}
 
     <div class="form-group">
         <button type="submit" class="button">Generate Report</button>
-        {{#if_pro_plan}}
-        <button type="submit" name="export" value="csv" class="button button-secondary">
-            Export as CSV
-        </button>
-        {{/if_pro_plan}}
+        {{export_controls_html}}
     </div>
 </form>
 
-{{#if_report_generated}}
-<h3 style="margin-top: 2rem;">Report Results</h3>
-<p style="color: #7f8c8d;">
-    Date Range: {{report_start_date}} to {{report_end_date}}
-    {{#if_grouped}}
-    | Grouped by: {{report_grouping}}
-    {{/if_grouped}}
-</p>
-
-<table style="margin-top: 1rem;">
-    <thead>
-        <tr>
-            <th>Date</th>
-            <th>Active Users</th>
-            <th>Sessions</th>
-            <th>Accounts</th>
-        </tr>
-    </thead>
-    <tbody>
-        {{#each_report_row}}
-        <tr>
-            <td>{{date}}</td>
-            <td>{{user_count}}</td>
-            <td>{{session_count}}</td>
-            <td>{{account_count}}</td>
-        </tr>
-        {{/each_report_row}}
-        {{#if_no_data}}
-        <tr>
-            <td colspan="4" style="text-align: center; color: #7f8c8d;">
-                No data available for this date range
-            </td>
-        </tr>
-        {{/if_no_data}}
-    </tbody>
-</table>
-
-<p style="margin-top: 1rem; color: #7f8c8d;">
-    <em>Report generated on-demand. No caching or background processing.</em>
-</p>
-{{/if_report_generated}}
+{{report_results_html}}
 
 <div style="margin-top: 2rem; padding: 1.5rem; background: #f8f9fa; border-radius: 4px;">
     <h3>About Reports</h3>

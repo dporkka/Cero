@@ -12,6 +12,10 @@
 /* Safe string copy - always null terminates */
 void safe_strncpy(char *dest, const char *src, size_t dest_size) {
     if (dest_size == 0) return;
+    if (!src) {
+        dest[0] = '\0';
+        return;
+    }
     strncpy(dest, src, dest_size - 1);
     dest[dest_size - 1] = '\0';
 }
@@ -42,6 +46,8 @@ void url_decode(char *str) {
 
 /* URL encode - caller must free result */
 char *url_encode(const char *str) {
+    if (!str) return NULL;
+
     /* Worst case: every character needs %XX encoding (3x size) */
     size_t max_len = strlen(str) * 3 + 1;
     char *encoded = malloc(max_len);
@@ -49,7 +55,7 @@ char *url_encode(const char *str) {
 
     char *p = encoded;
     for (const char *s = str; *s; s++) {
-        if (isalnum(*s) || *s == '-' || *s == '_' || *s == '.' || *s == '~') {
+        if (isalnum((unsigned char)*s) || *s == '-' || *s == '_' || *s == '.' || *s == '~') {
             *p++ = *s;
         } else if (*s == ' ') {
             *p++ = '+';
@@ -65,6 +71,8 @@ char *url_encode(const char *str) {
 
 /* HTML entity escape - caller must free result */
 char *html_escape(const char *str) {
+    if (!str) return NULL;
+
     /* Allocate buffer (worst case: every char needs escaping) */
     size_t len = strlen(str);
     char *escaped = malloc(len * 6 + 1); /* &quot; = 6 chars */
@@ -109,6 +117,11 @@ void str_trim(char *str) {
     }
 
     /* Trim trailing whitespace */
+    if (*start == '\0') {
+        str[0] = '\0';
+        return;
+    }
+
     char *end = str + strlen(str) - 1;
     while (end > start && isspace((unsigned char)*end)) {
         end--;
@@ -165,6 +178,7 @@ int str_ends_with(const char *str, const char *suffix) {
 
 /* Generate random hex string - caller must free result */
 char *generate_random_hex(size_t length) {
+    static const char hex_chars[] = "0123456789abcdef";
     char *hex = malloc(length + 1);
     if (!hex) return NULL;
 
@@ -181,7 +195,10 @@ char *generate_random_hex(size_t length) {
             fclose(urandom);
             return NULL;
         }
-        sprintf(&hex[i], "%02x", byte);
+        hex[i] = hex_chars[(byte >> 4) & 0x0F];
+        if (i + 1 < length) {
+            hex[i + 1] = hex_chars[byte & 0x0F];
+        }
     }
     hex[length] = '\0';
     fclose(urandom);

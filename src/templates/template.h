@@ -37,6 +37,18 @@ char *template_render(const char *template_content, template_ctx_t *ctx);
 /* Returns rendered HTML - caller must free */
 char *template_render_file(const char *template_name, template_ctx_t *ctx);
 
+/* Render raw content inside the shared layout template */
+/* Returns rendered HTML - caller must free */
+char *template_render_layout(const char *page_title, const char *content_html,
+                            int is_authenticated, const char *user_email,
+                            int is_admin);
+
+/* Render template file and wrap it in the shared layout template */
+/* Returns rendered HTML - caller must free */
+char *template_render_page(const char *page_title, const char *template_name,
+                          template_ctx_t *ctx, int is_authenticated,
+                          const char *user_email, int is_admin);
+
 /* Free template context */
 void template_ctx_free(template_ctx_t *ctx);
 

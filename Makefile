@@ -140,6 +140,7 @@ help:
 	@echo "  init-db    - Initialize database with schema"
 	@echo "  backup     - Backup database file"
 	@echo "  debug      - Build with debug symbols"
+	@echo "  test       - Run end-to-end smoke test"
 	@echo "  check-deps - Check for required dependencies"
 	@echo "  help       - Show this help message"
 	@echo ""
@@ -149,4 +150,8 @@ help:
 	@echo "  LDFLAGS = $(LDFLAGS)"
 	@echo "  TARGET  = $(TARGET)"
 
-.PHONY: all clean distclean install uninstall init-db backup debug check-deps help directories
+test: all
+	@echo "Running smoke test..."
+	@./tests/smoke.sh
+
+.PHONY: all clean distclean install uninstall init-db backup debug test check-deps help directories

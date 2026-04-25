@@ -140,11 +140,23 @@ void server_handle_client(int client_socket) {
     }
 
     /* Validate session (if session cookie present) */
-    const char *session_token = request_get_cookie(&req, "session");
+    const char *session_token = request_get_cookie(&req, "session_token");
     if (session_token != NULL) {
         if (session_validate(session_token, &req) != 0) {
             /* Session is valid, user context populated in req */
             LOG_DEBUG("server", "Valid session for user %d", req.user_id);
+        }
+    }
+
+    if (req.is_authenticated) {
+        ratelimit_result_t user_rate_result = ratelimit_check_user(req.user_id);
+        if (user_rate_result == RATELIMIT_EXCEEDED) {
+            LOG_WARN("server", "User rate limit exceeded for user %d", req.user_id);
+            send_error_response(client_socket, HTTP_429_TOO_MANY_REQUESTS,
+                              "Too Many Requests");
+            request_free(&req);
+            close(client_socket);
+            return;
         }
     }
 

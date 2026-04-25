@@ -180,17 +180,7 @@
             <h1>Core SaaS Platform</h1>
             <nav>
                 <ul>
-                    {{#if_authenticated}}
-                    <li><a href="/dashboard">Dashboard</a></li>
-                    <li><a href="/reports">Reports</a></li>
-                    <li><a href="/billing">Billing</a></li>
-                    {{#if_admin}}
-                    <li><a href="/admin/billing">Admin</a></li>
-                    {{/if_admin}}
-                    <li><a href="/logout">Logout ({{user_email}})</a></li>
-                    {{else}}
-                    <li><a href="/login">Login</a></li>
-                    {{/if_authenticated}}
+                    {{navigation_links}}
                 </ul>
             </nav>
         </div>

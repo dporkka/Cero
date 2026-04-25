@@ -9,6 +9,29 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void response_remove_header(http_response_t *resp, const char *name) {
+    size_t name_len = strlen(name);
+
+    for (int i = 0; i < resp->header_count; i++) {
+        if (strncmp(resp->headers[i], name, name_len) == 0 &&
+            resp->headers[i][name_len] == ':') {
+            free(resp->headers[i]);
+            for (int j = i; j < resp->header_count - 1; j++) {
+                resp->headers[j] = resp->headers[j + 1];
+            }
+            resp->header_count--;
+            i--;
+        }
+    }
+}
+
+static void response_set_or_replace_header(http_response_t *resp,
+                                           const char *name,
+                                           const char *value) {
+    response_remove_header(resp, name);
+    response_add_header(resp, name, value);
+}
+
 /* Create new response */
 http_response_t *response_new(void) {
     http_response_t *resp = calloc(1, sizeof(http_response_t));
@@ -33,6 +56,8 @@ http_response_t *response_new(void) {
 
 /* Set response status */
 void response_set_status(http_response_t *resp, int status_code) {
+    if (!resp) return;
+
     resp->status_code = status_code;
 
     switch (status_code) {
@@ -57,6 +82,8 @@ void response_set_status(http_response_t *resp, int status_code) {
 
 /* Add response header */
 void response_add_header(http_response_t *resp, const char *name, const char *value) {
+    if (!resp || !name || !value) return;
+
     if (resp->header_count >= MAX_RESPONSE_HEADERS) {
         LOG_WARN("response", "Too many headers");
         return;
@@ -105,7 +132,8 @@ void response_delete_cookie(http_response_t *resp, const char *name) {
 
 /* Set response body */
 void response_set_body(http_response_t *resp, const char *body) {
-    size_t needed = strlen(body) + 1;
+    const char *safe_body = body ? body : "";
+    size_t needed = strlen(safe_body) + 1;
 
     if (needed > resp->body_capacity) {
         resp->body_capacity = needed * 2;
@@ -117,17 +145,19 @@ void response_set_body(http_response_t *resp, const char *body) {
         resp->body = new_body;
     }
 
-    strcpy(resp->body, body);
+    strcpy(resp->body, safe_body);
     resp->body_length = needed - 1;
 
     /* Automatically set Content-Length header */
     char content_length[32];
     snprintf(content_length, sizeof(content_length), "%zu", resp->body_length);
-    response_add_header(resp, "Content-Length", content_length);
+    response_set_or_replace_header(resp, "Content-Length", content_length);
 }
 
 /* Append to response body */
 void response_append_body(http_response_t *resp, const char *data) {
+    if (!resp || !data) return;
+
     size_t data_len = strlen(data);
     size_t needed = resp->body_length + data_len + 1;
 
@@ -147,32 +177,18 @@ void response_append_body(http_response_t *resp, const char *data) {
     /* Update Content-Length header */
     char content_length[32];
     snprintf(content_length, sizeof(content_length), "%zu", resp->body_length);
-
-    /* Remove old Content-Length if exists */
-    for (int i = 0; i < resp->header_count; i++) {
-        if (strncmp(resp->headers[i], "Content-Length:", 15) == 0) {
-            free(resp->headers[i]);
-            /* Shift headers down */
-            for (int j = i; j < resp->header_count - 1; j++) {
-                resp->headers[j] = resp->headers[j + 1];
-            }
-            resp->header_count--;
-            break;
-        }
-    }
-
-    response_add_header(resp, "Content-Length", content_length);
+    response_set_or_replace_header(resp, "Content-Length", content_length);
 }
 
 /* Set content type */
 void response_set_content_type(http_response_t *resp, const char *content_type) {
-    response_add_header(resp, "Content-Type", content_type);
+    response_set_or_replace_header(resp, "Content-Type", content_type);
 }
 
 /* Redirect to URL */
 void response_redirect(http_response_t *resp, const char *url, int permanent) {
     response_set_status(resp, permanent ? 301 : 302);
-    response_add_header(resp, "Location", url);
+    response_set_or_replace_header(resp, "Location", url);
     response_set_body(resp, "");
 }
 
@@ -193,23 +209,29 @@ char *response_build(http_response_t *resp) {
     total_size += 1; /* null terminator */
 
     /* Build response */
-    char *response = malloc(total_size);
+    char *response = calloc(1, total_size);
     if (!response) {
         LOG_ERROR("response", "Failed to allocate response buffer");
         return NULL;
     }
 
-    strcpy(response, status_line);
+    size_t offset = 0;
+    memcpy(response + offset, status_line, strlen(status_line));
+    offset += strlen(status_line);
 
     for (int i = 0; i < resp->header_count; i++) {
-        strcat(response, resp->headers[i]);
-        strcat(response, "\r\n");
+        size_t header_len = strlen(resp->headers[i]);
+        memcpy(response + offset, resp->headers[i], header_len);
+        offset += header_len;
+        memcpy(response + offset, "\r\n", 2);
+        offset += 2;
     }
 
-    strcat(response, "\r\n");
+    memcpy(response + offset, "\r\n", 2);
+    offset += 2;
 
     if (resp->body_length > 0) {
-        strcat(response, resp->body);
+        memcpy(response + offset, resp->body, resp->body_length);
     }
 
     return response;
