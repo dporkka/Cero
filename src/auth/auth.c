@@ -18,6 +18,7 @@
 
 #define BCRYPT_COST 12
 #define BCRYPT_SALT_LENGTH 22
+#define BCRYPT_RAW_SALT_BYTES 16
 
 typedef struct {
     char *values[16];
@@ -66,9 +67,11 @@ static void auth_secure_zero(void *buffer, size_t length) {
 static int auth_generate_bcrypt_salt(char *salt, size_t salt_size) {
     static const char bcrypt_alphabet[] =
         "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    unsigned char random_bytes[BCRYPT_SALT_LENGTH];
+    unsigned char random_bytes[BCRYPT_RAW_SALT_BYTES];
     char encoded[BCRYPT_SALT_LENGTH + 1];
     FILE *urandom;
+    size_t input_index = 0;
+    size_t output_index = 0;
 
     if (salt_size < 8 + BCRYPT_SALT_LENGTH + 1) {
         return -1;
@@ -85,10 +88,32 @@ static int auth_generate_bcrypt_salt(char *salt, size_t salt_size) {
     }
     fclose(urandom);
 
-    for (size_t i = 0; i < sizeof(random_bytes); i++) {
-        encoded[i] = bcrypt_alphabet[random_bytes[i] & 0x3F];
+    while (input_index < sizeof(random_bytes) && output_index < BCRYPT_SALT_LENGTH) {
+        unsigned int c1 = random_bytes[input_index++];
+        encoded[output_index++] = bcrypt_alphabet[(c1 >> 2) & 0x3F];
+        c1 = (c1 & 0x03) << 4;
+
+        if (input_index >= sizeof(random_bytes)) {
+            encoded[output_index++] = bcrypt_alphabet[c1 & 0x3F];
+            break;
+        }
+
+        unsigned int c2 = random_bytes[input_index++];
+        c1 |= (c2 >> 4) & 0x0F;
+        encoded[output_index++] = bcrypt_alphabet[c1 & 0x3F];
+        c1 = (c2 & 0x0F) << 2;
+
+        if (input_index >= sizeof(random_bytes)) {
+            encoded[output_index++] = bcrypt_alphabet[c1 & 0x3F];
+            break;
+        }
+
+        unsigned int c3 = random_bytes[input_index++];
+        c1 |= (c3 >> 6) & 0x03;
+        encoded[output_index++] = bcrypt_alphabet[c1 & 0x3F];
+        encoded[output_index++] = bcrypt_alphabet[c3 & 0x3F];
     }
-    encoded[BCRYPT_SALT_LENGTH] = '\0';
+    encoded[output_index] = '\0';
 
     snprintf(salt, salt_size, "$2b$%02d$%s", BCRYPT_COST, encoded);
     return 0;

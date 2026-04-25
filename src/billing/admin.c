@@ -131,7 +131,7 @@ static int admin_search_accounts_query(const char *search_term,
     if (!like_pattern) {
         return -1;
     }
-    sprintf(like_pattern, "%%%s%%", search_term);
+    snprintf(like_pattern, strlen(search_term) + 3, "%%%s%%", search_term);
 
     if (db_prepare(sql, &stmt) != 0) {
         free(like_pattern);
