@@ -188,16 +188,19 @@ char *generate_random_hex(size_t length) {
         return NULL;
     }
 
-    for (size_t i = 0; i < length; i += 2) {
+    size_t byte_count = (length + 1) / 2;
+
+    for (size_t i = 0; i < byte_count; i++) {
+        size_t pos = i * 2;
         unsigned char byte;
         if (fread(&byte, 1, 1, urandom) != 1) {
             free(hex);
             fclose(urandom);
             return NULL;
         }
-        hex[i] = hex_chars[(byte >> 4) & 0x0F];
-        if (i + 1 < length) {
-            hex[i + 1] = hex_chars[byte & 0x0F];
+        hex[pos] = hex_chars[(byte >> 4) & 0x0F];
+        if (pos + 1 < length) {
+            hex[pos + 1] = hex_chars[byte & 0x0F];
         }
     }
     hex[length] = '\0';

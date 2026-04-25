@@ -118,7 +118,10 @@ static int auth_generate_bcrypt_salt(char *salt, size_t salt_size) {
         encoded[output_index++] = bcrypt_alphabet[c1 & 0x3F];
         encoded[output_index++] = bcrypt_alphabet[c3 & 0x3F];
     }
-    encoded[output_index] = '\0';
+    if (output_index != BCRYPT_SALT_LENGTH) {
+        return -1;
+    }
+    encoded[BCRYPT_SALT_LENGTH] = '\0';
 
     snprintf(salt, salt_size, "$2b$%02d$%s", BCRYPT_COST, encoded);
     return 0;
