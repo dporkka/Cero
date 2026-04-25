@@ -13,7 +13,7 @@
 #include <time.h>
 
 #define DEFAULT_GRACE_DAYS 7
-/* Assumes a modern 64-bit time_t runtime, which matches the deployment target. */
+/* Assumes a modern 64-bit time_t runtime; 100 years keeps free plans effectively non-expiring. */
 #define FREE_PLAN_VALID_YEARS 100
 
 static int subscription_log_change(int account_id,

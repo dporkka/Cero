@@ -13,7 +13,7 @@
 #include <time.h>
 
 #define RATE_LIMIT_WINDOW_SECONDS 60
-#define RATELIMIT_RETENTION_SECONDS (86400 * 7)
+#define RATE_LIMIT_RETENTION_SECONDS (86400 * 7)
 
 static ratelimit_result_t ratelimit_check_identifier_internal(const char *identifier) {
     sqlite3_stmt *stmt;
@@ -139,7 +139,7 @@ ratelimit_result_t ratelimit_check_user(int user_id) {
 /* Clean up old rate limit entries (call periodically) */
 int ratelimit_cleanup(void) {
     time_t now = time(NULL);
-    time_t cutoff = now - RATELIMIT_RETENTION_SECONDS;
+    time_t cutoff = now - RATE_LIMIT_RETENTION_SECONDS;
 
     sqlite3_stmt *stmt;
     const char *sql = "DELETE FROM rate_limits WHERE last_refill_at < ?";
