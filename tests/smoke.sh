@@ -36,6 +36,7 @@ sqlite3 "$TMPDIR/app.db" < "$REPO_DIR/config/schema.sql" > /dev/null
 
 HASH="$(python -W ignore::DeprecationWarning - <<'PY'
 import crypt
+# Fixed salt is intentional here so the smoke test stays deterministic.
 print(crypt.crypt('secret123', '$2b$12$abcdefghijklmnopqrstuu'))
 PY
 )"

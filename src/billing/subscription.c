@@ -13,6 +13,7 @@
 #include <time.h>
 
 #define DEFAULT_GRACE_DAYS 7
+#define FREE_PLAN_VALID_YEARS 100
 
 static int subscription_log_change(int account_id,
                                    const subscription_t *previous,
@@ -258,7 +259,7 @@ int subscription_create(int account_id, plan_t plan) {
     time_t valid_until;
 
     if (plan == PLAN_FREE) {
-        valid_until = now + ((time_t)100 * 365 * 86400);
+        valid_until = now + ((time_t)FREE_PLAN_VALID_YEARS * 365 * 86400);
     } else {
         valid_until = now + (30 * 86400);
     }

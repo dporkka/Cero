@@ -48,6 +48,21 @@ static void auth_free_owned(owned_strings_t *owned) {
     }
 }
 
+static int auth_is_bcrypt_hash(const char *hash) {
+    return hash != NULL &&
+           (strncmp(hash, "$2a$", 4) == 0 ||
+            strncmp(hash, "$2b$", 4) == 0 ||
+            strncmp(hash, "$2x$", 4) == 0 ||
+            strncmp(hash, "$2y$", 4) == 0);
+}
+
+static void auth_secure_zero(void *buffer, size_t length) {
+    volatile unsigned char *p = (volatile unsigned char *)buffer;
+    while (length-- > 0) {
+        *p++ = 0;
+    }
+}
+
 static int auth_generate_bcrypt_salt(char *salt, size_t salt_size) {
     static const char bcrypt_alphabet[] =
         "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -138,7 +153,7 @@ int auth_hash_password(const char *password, char *hash, size_t hash_size) {
         return -1;
     }
 
-    if (strncmp(hashed, "$2", 2) != 0) {
+    if (!auth_is_bcrypt_hash(hashed)) {
         LOG_ERROR("auth", "System crypt did not return a bcrypt hash");
         return -1;
     }
@@ -311,7 +326,7 @@ http_response_t *handle_login_submit(http_request_t *req) {
     }
 
     user_id = auth_authenticate_user(email, password);
-    memset(password, 0, strlen(password));
+    auth_secure_zero(password, strlen(password));
     free(password);
 
     if (user_id < 0) {
