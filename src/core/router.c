@@ -188,12 +188,20 @@ static http_response_t *render_error_response(http_request_t *req,
 static char *build_billing_rows(int account_id) {
     billing_event_t *events = NULL;
     int event_count = 0;
+    int result;
     char *html = NULL;
     size_t length = 0;
     size_t capacity = 0;
     owned_strings_t owned = {{0}, 0};
 
-    if (billing_get_events_for_account(account_id, &events, &event_count) != 0 || event_count == 0) {
+    result = billing_get_events_for_account(account_id, &events, &event_count);
+    if (result != 0) {
+        return strdup(
+            "<tr><td colspan=\"5\" style=\"text-align: center; color: #c0392b;\">"
+            "Billing history is temporarily unavailable</td></tr>");
+    }
+
+    if (event_count == 0) {
         return strdup("<tr><td colspan=\"5\" style=\"text-align: center; color: #7f8c8d;\">No billing events yet</td></tr>");
     }
 

@@ -15,7 +15,7 @@
 #define RATE_LIMIT_WINDOW_SECONDS 60
 #define RATELIMIT_RETENTION_SECONDS (86400 * 7)
 
-static ratelimit_result_t ratelimit_check_identifier(const char *identifier) {
+static ratelimit_result_t ratelimit_check_identifier_internal(const char *identifier) {
     sqlite3_stmt *stmt;
     const char *select_sql = "SELECT tokens, last_refill_at, window_start_at "
                              "FROM rate_limits WHERE identifier = ?";
@@ -126,14 +126,14 @@ static ratelimit_result_t ratelimit_check_identifier(const char *identifier) {
 
 /* Check rate limit for IP address */
 ratelimit_result_t ratelimit_check_ip(const char *ip_address) {
-    return ratelimit_check_identifier(ip_address);
+    return ratelimit_check_identifier_internal(ip_address);
 }
 
 /* Check rate limit for user */
 ratelimit_result_t ratelimit_check_user(int user_id) {
     char identifier[64];
     snprintf(identifier, sizeof(identifier), "user:%d", user_id);
-    return ratelimit_check_identifier(identifier);
+    return ratelimit_check_identifier_internal(identifier);
 }
 
 /* Clean up old rate limit entries (call periodically) */

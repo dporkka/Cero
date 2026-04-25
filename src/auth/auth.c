@@ -88,6 +88,11 @@ static int auth_generate_bcrypt_salt(char *salt, size_t salt_size) {
     }
     fclose(urandom);
 
+    /*
+     * Encode 16 random bytes into bcrypt's custom 64-character alphabet.
+     * Bcrypt salts store 6-bit groups, so this mirrors the standard bcrypt
+     * base64 packing rules rather than MIME/base64.
+     */
     while (input_index < sizeof(random_bytes) && output_index < BCRYPT_SALT_LENGTH) {
         unsigned int c1 = random_bytes[input_index++];
         encoded[output_index++] = bcrypt_alphabet[(c1 >> 2) & 0x3F];
